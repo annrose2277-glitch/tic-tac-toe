@@ -1,353 +1,340 @@
-const cells = document.querySelectorAll(".cell");
-const statusText = document.getElementById("status");
-const resetBtn = document.getElementById("resetBtn");
-const startBtn = document.getElementById("startBtn");
-const changeNamesBtn = document.getElementById("changeNamesBtn");
-const setupContainer = document.getElementById("setup-container");
-const gameContainer = document.getElementById("game-container");
+/**
+ * TicTacToe Module
+ * Encapsulates game state, logic, and UI interactions to prevent global scope pollution.
+ */
+const TicTacToe = (() => {
+  // --- Private Constants ---
+  const winningConditions = [
+    [0, 1, 2], [3, 4, 5], [6, 7, 8],
+    [0, 3, 6], [1, 4, 7], [2, 5, 8],
+    [0, 4, 8], [2, 4, 6]
+  ];
 
-const modeSelect = document.getElementById("modeSelect");
-const difficultySelect = document.getElementById("difficulty");
+  // --- Private State ---
+  let state = {
+    playerNames: { "X": "Player X", "O": "Player O" },
+    currentPlayer: "X",
+    gameActive: false,
+    gameState: ["", "", "", "", "", "", "", "", ""],
+    scores: JSON.parse(localStorage.getItem("tttScores")) || { X: 0, O: 0, draws: 0 },
+    gameMode: "2p",
+    difficulty: "easy",
+    botSymbol: "O",
+    gameHistory: JSON.parse(localStorage.getItem("tttHistory")) || []
+  };
 
-let playerNames = { "X": "Player X", "O": "Player O" };
-let currentPlayer = "X";
-let gameActive = false;
-let gameState = ["", "", "", "", "", "", "", "", ""];
-let scores = JSON.parse(localStorage.getItem("tttScores")) || { X: 0, O: 0, draws: 0 };
+  // --- DOM Elements Cache ---
+  const els = {
+    cells: document.querySelectorAll(".cell"),
+    statusText: document.getElementById("status"),
+    resetBtn: document.getElementById("resetBtn"),
+    startBtn: document.getElementById("startBtn"),
+    changeNamesBtn: document.getElementById("changeNamesBtn"),
+    setupContainer: document.getElementById("setup-container"),
+    gameContainer: document.getElementById("game-container"),
+    modeSelect: document.getElementById("modeSelect"),
+    difficultySelect: document.getElementById("difficulty"),
+    scoreX: document.getElementById("scoreX"),
+    scoreO: document.getElementById("scoreO"),
+    scoreDraw: document.getElementById("scoreDraw"),
+    resetScoresBtn: document.getElementById("resetScores"),
+    historyList: document.getElementById("historyList"),
+    winLine: document.getElementById("winLine"),
+    board: document.getElementById("board"),
+    p1Input: document.getElementById("p1Input"),
+    p2Input: document.getElementById("p2Input")
+  };
 
-let gameMode = "2p"; // "2p" or "bot"
-let difficulty = "easy"; // easy, medium, hard
-let botSymbol = "O"; // Bot will play as O (human is X)
+  // --- Private Methods ---
 
-let gameHistory = JSON.parse(localStorage.getItem("tttHistory")) || [];
+  const launchConfetti = () => {
+    const duration = 3000;
+    const end = Date.now() + duration;
 
-const winningConditions = [
-  [0,1,2],[3,4,5],[6,7,8],
-  [0,3,6],[1,4,7],[2,5,8],
-  [0,4,8],[2,4,6]
-];
-// --- Confetti Animation ---
-function launchConfetti() {
-  const duration = 3000; // 3 seconds
-  const end = Date.now() + duration;
+    const interval = setInterval(() => {
+      if (Date.now() > end) {
+        clearInterval(interval);
+        return;
+      }
+      if (typeof confetti === "function") {
+        confetti({
+          particleCount: 60,
+          spread: 100,
+          origin: { y: 0.6 }
+        });
+      }
+    }, 250);
+  };
 
-  const interval = setInterval(() => {
-    if (Date.now() > end) {
-      clearInterval(interval);
-      return;
+  const updateStatus = () => {
+    if (!state.gameActive) return;
+    els.statusText.innerText = `${state.playerNames[state.currentPlayer]}'s turn (${state.currentPlayer})`;
+  };
+
+  const updateLeaderboard = () => {
+    els.scoreX.innerText = state.scores.X || 0;
+    els.scoreO.innerText = state.scores.O || 0;
+    els.scoreDraw.innerText = state.scores.draws || 0;
+    localStorage.setItem("tttScores", JSON.stringify(state.scores));
+  };
+
+  const saveGameHistory = (result) => {
+    state.gameHistory.push(result);
+    localStorage.setItem("tttHistory", JSON.stringify(state.gameHistory));
+    displayGameHistory();
+  };
+
+  const displayGameHistory = () => {
+    if (!els.historyList) return;
+    els.historyList.innerHTML = "";
+    state.gameHistory.forEach((result, index) => {
+      const li = document.createElement("li");
+      li.innerText = `Game ${index + 1}: ${result}`;
+      els.historyList.appendChild(li);
+    });
+  };
+
+  const playMove = (index, player) => {
+    state.gameState[index] = player;
+    const cell = Array.from(els.cells).find(c => Number(c.getAttribute("data-index")) === index);
+    if (cell) {
+      cell.textContent = player;
+      cell.style.color = player === "X" ? "#3498db" : "#e67e22";
+    }
+  };
+
+  const checkWinner = (board) => {
+    for (let cond of winningConditions) {
+      const [a, b, c] = cond;
+      if (board[a] && board[a] === board[b] && board[b] === board[c]) {
+        return board[a];
+      }
+    }
+    return null;
+  };
+
+  const animateWinLine = (cond, winner) => {
+    if (!els.winLine || !els.board) return;
+
+    const cellEls = Array.from(els.cells);
+    const startCell = cellEls[cond[0]];
+    const endCell = cellEls[cond[2]];
+
+    const boardRect = els.board.getBoundingClientRect();
+    const sRect = startCell.getBoundingClientRect();
+    const eRect = endCell.getBoundingClientRect();
+
+    const x1 = sRect.left - boardRect.left + sRect.width / 2;
+    const y1 = sRect.top - boardRect.top + sRect.height / 2;
+    const x2 = eRect.left - boardRect.left + eRect.width / 2;
+    const y2 = eRect.top - boardRect.top + eRect.height / 2;
+
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const length = Math.hypot(dx, dy);
+    const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+
+    els.winLine.style.width = `${length}px`;
+    els.winLine.style.left = `${x1}px`;
+    const h = els.winLine.offsetHeight || 6;
+    els.winLine.style.top = `${y1 - h / 2}px`;
+    els.winLine.style.transform = `rotate(${angle}deg)`;
+    els.winLine.style.background = winner === "X" ? "#3498db" : "#e67e22";
+    els.winLine.style.opacity = "1";
+  };
+
+  const getBestMove = (board, player, alpha = -Infinity, beta = Infinity) => {
+    const opponent = player === "X" ? "O" : "X";
+    const winner = checkWinner(board);
+    
+    if (winner === state.botSymbol) return { index: -1, score: 10 };
+    if (winner === (state.botSymbol === "X" ? "O" : "X")) return { index: -1, score: -10 };
+    if (!board.includes("")) return { index: -1, score: 0 };
+
+    let bestMove;
+
+    if (player === state.botSymbol) {
+      let bestScore = -Infinity;
+      for (let i = 0; i < board.length; i++) {
+        if (board[i] === "") {
+          board[i] = player;
+          let result = getBestMove(board, opponent, alpha, beta);
+          board[i] = "";
+          
+          if (result.score > bestScore) {
+            bestScore = result.score;
+            bestMove = { index: i, score: bestScore };
+          }
+          alpha = Math.max(alpha, bestScore);
+          if (beta <= alpha) break;
+        }
+      }
+      return bestMove || { index: -1, score: bestScore };
+    } else {
+      let bestScore = Infinity;
+      for (let i = 0; i < board.length; i++) {
+        if (board[i] === "") {
+          board[i] = player;
+          let result = getBestMove(board, opponent, alpha, beta);
+          board[i] = "";
+          
+          if (result.score < bestScore) {
+            bestScore = result.score;
+            bestMove = { index: i, score: bestScore };
+          }
+          beta = Math.min(beta, bestScore);
+          if (beta <= alpha) break;
+        }
+      }
+      return bestMove || { index: -1, score: bestScore };
+    }
+  };
+
+  const aiMove = () => {
+    if (!state.gameActive) return;
+    const emptyIndices = state.gameState.map((val, idx) => val === "" ? idx : null).filter(val => val !== null);
+    if (emptyIndices.length === 0) return;
+
+    let moveIndex;
+    if (state.difficulty === "easy") {
+      moveIndex = emptyIndices[Math.floor(Math.random() * emptyIndices.length)];
+    } else if (state.difficulty === "medium") {
+      if (Math.random() < 0.25) {
+        moveIndex = emptyIndices[Math.floor(Math.random() * emptyIndices.length)];
+      } else {
+        moveIndex = getBestMove(state.gameState.slice(), state.botSymbol).index;
+      }
+    } else {
+      moveIndex = getBestMove(state.gameState.slice(), state.botSymbol).index;
     }
 
-    confetti({
-      particleCount: 60,
-      spread: 100,
-      origin: { y: 0.6 }
-    });
-  }, 250);
-}
+    playMove(moveIndex, state.botSymbol);
+    if (!checkResult()) {
+      state.currentPlayer = state.currentPlayer === "X" ? "O" : "X";
+      updateStatus();
+    }
+  };
 
-// enable difficulty when bot selected
-modeSelect.addEventListener("change", () => {
-  gameMode = modeSelect.value;
-  difficultySelect.disabled = gameMode !== "bot";
-});
+  const checkResult = () => {
+    for (let cond of winningConditions) {
+      const [a, b, c] = cond;
+      if (state.gameState[a] && state.gameState[a] === state.gameState[b] && state.gameState[b] === state.gameState[c]) {
+        const winner = state.gameState[a];
+        els.statusText.innerText = `${state.playerNames[winner]} wins!`;
+        state.scores[winner] = (state.scores[winner] || 0) + 1;
+        
+        saveGameHistory(`${state.playerNames[winner]} won`);
+        state.gameActive = false;
+        updateLeaderboard();
+        animateWinLine(cond, winner);
+        launchConfetti();
+        return true;
+      }
+    }
 
-// start button
-startBtn.addEventListener("click", () => {
-  const p1 = document.getElementById("p1Input").value.trim();
-  const p2 = document.getElementById("p2Input").value.trim();
-
-  playerNames["X"] = p1 || "Player X";
-  playerNames["O"] = p2 || "Player O";
-
-  gameMode = modeSelect.value;
-  difficulty = difficultySelect.value;
-
-  setupContainer.style.display = "none";
-  gameContainer.style.display = "block";
-  startGame();
-});
-
-function startGame() {
-  gameActive = true;
-  currentPlayer = "X";
-  gameState = ["", "", "", "", "", "", "", "", ""];
-  updateStatus();
-  cells.forEach(cell => {
-    cell.innerText = "";
-    cell.style.color = "#333";
-  });
-  updateLeaderboard();
-
-  // reset/hide win line
-  const winLine = document.getElementById("winLine");
-  if (winLine) {
-    winLine.style.width = "0";
-    winLine.style.opacity = "0";
-    winLine.style.transform = "rotate(0deg)";
-  }
-  // if bot starts first in some future change, call aiMove() here
-}
-
-function updateStatus() {
-  if (!gameActive) return;
-  statusText.innerText = `${playerNames[currentPlayer]}'s turn (${currentPlayer})`;
-}
-
-// Game core
-function handleCellClick(e) {
-  const clickedCell = e.target;
-  const cellIndex = Number(clickedCell.getAttribute("data-index"));
-  if (isNaN(cellIndex)) return;
-  if (!gameActive) return;
-  if (gameState[cellIndex] !== "") return;
-
-  playMove(cellIndex, currentPlayer);
-
-  if (checkResult()) return;
-
-  // switch
-  currentPlayer = currentPlayer === "X" ? "O" : "X";
-  updateStatus();
-
-  // If bot mode and it's bot's turn, schedule AI move
-  if (gameMode === "bot" && currentPlayer === botSymbol && gameActive) {
-    setTimeout(() => aiMove(), 300);
-  }
-}
-
-function playMove(index, player) {
-  gameState[index] = player;
-  const cell = document.querySelector(`.cell[data-index='${index}']`);
-  if (cell) {
-    cell.textContent = player;
-    cell.style.color = player === "X" ? "#3498db" : "#e67e22";
-  }
-}
-
-// result checking
-function checkResult() {
-  for (let cond of winningConditions) {
-    const [a, b, c] = cond;
-
-    if (gameState[a] && gameState[a] === gameState[b] && gameState[b] === gameState[c]) {
-      const winner = gameState[a];
-      statusText.innerText = `${playerNames[winner]} wins!`;
-      scores[winner] = (scores[winner] || 0) + 1;
-      
-      saveGameHistory(`${playerNames[winner]} won`);
-      gameActive = false;
+    if (!state.gameState.includes("")) {
+      els.statusText.innerText = "It's a draw!";
+      state.scores.draws = (state.scores.draws || 0) + 1;
+      saveGameHistory("Draw");
+      state.gameActive = false;
       updateLeaderboard();
-      animateWinLine(cond, winner);
-      launchConfetti(); // Consolidated confetti trigger
       
+      if (els.winLine) {
+        els.winLine.style.width = "0";
+        els.winLine.style.opacity = "0";
+      }
       return true;
     }
-  }
+    return false;
+  };
 
-  // Draw logic remains the same
-  if (!gameState.includes("")) {
-    statusText.innerText = "It's a draw!";
-    scores.draws = (scores.draws || 0) + 1;
-    saveGameHistory("Draw");
-    gameActive = false;
+  const startGame = () => {
+    state.gameActive = true;
+    state.currentPlayer = "X";
+    state.gameState = ["", "", "", "", "", "", "", "", ""];
+    updateStatus();
+    els.cells.forEach(cell => {
+      cell.innerText = "";
+      cell.style.color = "#333";
+    });
     updateLeaderboard();
+
+    if (els.winLine) {
+      els.winLine.style.width = "0";
+      els.winLine.style.opacity = "0";
+      els.winLine.style.transform = "rotate(0deg)";
+    }
+  };
+
+  const handleCellClick = (e) => {
+    const clickedCell = e.target;
+    const cellIndex = Number(clickedCell.getAttribute("data-index"));
     
-    const winLine = document.getElementById("winLine");
-    if (winLine) {
-      winLine.style.width = "0";
-      winLine.style.opacity = "0";
+    if (isNaN(cellIndex) || !state.gameActive || state.gameState[cellIndex] !== "") return;
+
+    playMove(cellIndex, state.currentPlayer);
+
+    if (checkResult()) return;
+
+    state.currentPlayer = state.currentPlayer === "X" ? "O" : "X";
+    updateStatus();
+
+    if (state.gameMode === "bot" && state.currentPlayer === state.botSymbol && state.gameActive) {
+      setTimeout(() => aiMove(), 300);
     }
-    return true;
-  }
-  return false;
-}
+  };
 
+  const resetGame = () => {
+    startGame();
+  };
 
-// animate the strike line across winning cells
-function animateWinLine(cond, winner) {
-  const winLine = document.getElementById("winLine");
-  const board = document.getElementById("board");
-  if (!winLine || !board) return;
+  const bindEvents = () => {
+    els.modeSelect.addEventListener("change", () => {
+      state.gameMode = els.modeSelect.value;
+      els.difficultySelect.disabled = state.gameMode !== "bot";
+    });
 
-  const cellEls = Array.from(document.querySelectorAll(".cell"));
-  const startCell = cellEls[cond[0]];
-  const endCell = cellEls[cond[2]]; // endpoints give full length for row/col/diag
+    els.startBtn.addEventListener("click", () => {
+      state.playerNames["X"] = els.p1Input.value.trim() || "Player X";
+      state.playerNames["O"] = els.p2Input.value.trim() || "Player O";
+      state.gameMode = els.modeSelect.value;
+      state.difficulty = els.difficultySelect.value;
 
-  const boardRect = board.getBoundingClientRect();
-  const sRect = startCell.getBoundingClientRect();
-  const eRect = endCell.getBoundingClientRect();
+      els.setupContainer.style.display = "none";
+      els.gameContainer.style.display = "block";
+      startGame();
+    });
 
-  // centers relative to board
-  const x1 = sRect.left - boardRect.left + sRect.width / 2;
-  const y1 = sRect.top - boardRect.top + sRect.height / 2;
-  const x2 = eRect.left - boardRect.left + eRect.width / 2;
-  const y2 = eRect.top - boardRect.top + eRect.height / 2;
+    els.cells.forEach(cell => cell.addEventListener("click", handleCellClick));
+    els.resetBtn.addEventListener("click", resetGame);
 
-  const dx = x2 - x1;
-  const dy = y2 - y1;
-  const length = Math.hypot(dx, dy);
-  const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+    els.changeNamesBtn.addEventListener("click", () => {
+      els.gameContainer.style.display = "none";
+      els.setupContainer.style.display = "block";
+      els.p1Input.value = "";
+      els.p2Input.value = "";
+      resetGame();
+      state.gameActive = false;
+    });
 
-  // apply styles (winLine transform-origin is left center)
-  winLine.style.width = `${length}px`;
-  // left/top should be the start center
-  winLine.style.left = `${x1}px`;
-  // position line vertically centered on the y coordinate
-  const h = winLine.offsetHeight || 6;
-  winLine.style.top = `${y1 - h / 2}px`;
-  winLine.style.transform = `rotate(${angle}deg)`;
-  winLine.style.background = winner === "X" ? "#3498db" : "#e67e22";
-  winLine.style.opacity = "1";
-}
+    els.resetScoresBtn.addEventListener("click", () => {
+      state.scores = { X: 0, O: 0, draws: 0 };
+      localStorage.removeItem("tttScores");
+      updateLeaderboard();
+    });
+  };
 
-// AI move logic
-function aiMove() {
-  if (!gameActive) return;
-  const empty = availableIndices(gameState);
-  if (empty.length === 0) return;
-
-  let moveIndex;
-  if (difficulty === "easy") {
-    moveIndex = empty[Math.floor(Math.random() * empty.length)];
-  } else if (difficulty === "medium") {
-    // 25% chance to play random to be beatable
-    if (Math.random() < 0.25) {
-      moveIndex = empty[Math.floor(Math.random() * empty.length)];
-    } else {
-      moveIndex = getBestMove(gameState.slice(), botSymbol, false).index;
+  // --- Public Interface ---
+  return {
+    init: () => {
+      bindEvents();
+      updateLeaderboard();
+      displayGameHistory();
+      // Ensure difficulty is synced on load
+      els.difficultySelect.disabled = els.modeSelect.value !== "bot";
     }
-  } else { // hard
-    moveIndex = getBestMove(gameState.slice(), botSymbol, true).index;
-  }
+  };
+})();
 
-  playMove(moveIndex, botSymbol);
-
-  if (checkResult()) return;
-
-  currentPlayer = currentPlayer === "X" ? "O" : "X";
-  updateStatus();
-}
-
-// helpers
-function availableIndices(board) {
-  const inds = [];
-  for (let i=0;i<board.length;i++) if (!board[i]) inds.push(i);
-  return inds;
-}
-
-function checkWinner(board) {
-  for (let cond of winningConditions) {
-    const [a,b,c] = cond;
-    if (board[a] && board[a] === board[b] && board[b] === board[c]) {
-      return board[a];
-    }
-  }
-  return null;
-}
-
-// Minimax implementation with Alpha-Beta Pruning
-// returns { index, score }
-function getBestMove(board, player, perfect = true, alpha = -Infinity, beta = Infinity) {
-  const opponent = player === "X" ? "O" : "X";
-  const winner = checkWinner(board);
-  
-  if (winner === botSymbol) return { index: -1, score: 10 };
-  if (winner === (botSymbol === "X" ? "O" : "X")) return { index: -1, score: -10 };
-  if (!board.includes("")) return { index: -1, score: 0 };
-
-  let bestMove;
-
-  if (player === botSymbol) {
-    let bestScore = -Infinity;
-    for (let i = 0; i < board.length; i++) {
-      if (board[i] === "") {
-        board[i] = player;
-        let result = getBestMove(board, opponent, perfect, alpha, beta);
-        board[i] = "";
-        
-        if (result.score > bestScore) {
-          bestScore = result.score;
-          bestMove = { index: i, score: bestScore };
-        }
-        alpha = Math.max(alpha, bestScore);
-        if (beta <= alpha) break; // Alpha-Beta Pruning
-      }
-    }
-    return bestMove || { index: -1, score: bestScore };
-  } else {
-    let bestScore = Infinity;
-    for (let i = 0; i < board.length; i++) {
-      if (board[i] === "") {
-        board[i] = player;
-        let result = getBestMove(board, opponent, perfect, alpha, beta);
-        board[i] = "";
-        
-        if (result.score < bestScore) {
-          bestScore = result.score;
-          bestMove = { index: i, score: bestScore };
-        }
-        beta = Math.min(beta, bestScore);
-        if (beta <= alpha) break; // Alpha-Beta Pruning
-      }
-    }
-    return bestMove || { index: -1, score: bestScore };
-  }
-}
-// leaderboard
-function updateLeaderboard() {
-  document.getElementById("scoreX").innerText = scores.X || 0;
-  document.getElementById("scoreO").innerText = scores.O || 0;
-  document.getElementById("scoreDraw").innerText = scores.draws || 0;
-  localStorage.setItem("tttScores", JSON.stringify(scores));
-}
-
-document.getElementById("resetScores").addEventListener("click", () => {
-  scores = { X: 0, O: 0, draws: 0 };
-  localStorage.removeItem("tttScores");
-  updateLeaderboard();
-});
-
-// Reset & UI
-function resetGame() {
-  startGame();
-  const winLine = document.getElementById("winLine");
-  if (winLine) winLine.style.width = "0";
-}
-cells.forEach(cell => cell.addEventListener("click", handleCellClick));
-resetBtn.addEventListener("click", resetGame);
-
-// allow going back to setup
-changeNamesBtn.addEventListener("click", () => {
-  gameContainer.style.display = "none";
-  setupContainer.style.display = "block";
-
-  // Clear input fields (optional but clean)
-  document.getElementById("p1Input").value = "";
-  document.getElementById("p2Input").value = "";
-
-  // Reset board state
-  resetGame();
-  gameActive = false;
-});
-updateLeaderboard();
-
-// GAME HISTORY FUNCTION
-function saveGameHistory(result) {
-  gameHistory.push(result);
-  localStorage.setItem("tttHistory", JSON.stringify(gameHistory));
-  displayGameHistory();
-}
-
-function displayGameHistory() {
-  const historyList = document.getElementById("historyList");
-  if (!historyList) return;
-  historyList.innerHTML = "";
-  gameHistory.forEach((result, index) => {
-    const li = document.createElement("li");
-    li.innerText = `Game ${index + 1}: ${result}`;
-    historyList.appendChild(li);
-  });
-}
-
-// Load history when page loads
-displayGameHistory();
+// Initialize the game
+TicTacToe.init();
