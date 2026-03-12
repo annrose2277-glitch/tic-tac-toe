@@ -127,63 +127,38 @@ function playMove(index, player) {
 // result checking
 function checkResult() {
   for (let cond of winningConditions) {
-    const [a,b,c] = cond;
+    const [a, b, c] = cond;
 
     if (gameState[a] && gameState[a] === gameState[b] && gameState[b] === gameState[c]) {
-
       const winner = gameState[a];
-
       statusText.innerText = `${playerNames[winner]} wins!`;
-
       scores[winner] = (scores[winner] || 0) + 1;
-
+      
       saveGameHistory(`${playerNames[winner]} won`);
-
       gameActive = false;
-
       updateLeaderboard();
-
       animateWinLine(cond, winner);
-
+      launchConfetti(); // Consolidated confetti trigger
+      
       return true;
     }
   }
 
-  if (roundWon) {
-  statusText.innerText = `${playerNames[currentPlayer]} wins!`;
-  scores[currentPlayer]++;
-  updateLeaderboard();
-  gameActive = false;
-  drawWinLine(winningPattern);
-  
-  launchConfetti(); // 🎉 ADD THIS LINE
-  
-  return true;
-}
-
-  // draw
+  // Draw logic remains the same
   if (!gameState.includes("")) {
-
     statusText.innerText = "It's a draw!";
-
     scores.draws = (scores.draws || 0) + 1;
-
     saveGameHistory("Draw");
-
     gameActive = false;
-
     updateLeaderboard();
-
+    
     const winLine = document.getElementById("winLine");
-
     if (winLine) {
       winLine.style.width = "0";
       winLine.style.opacity = "0";
     }
-
     return true;
   }
-
   return false;
 }
 
@@ -319,60 +294,6 @@ function getBestMove(board, player, perfect = true) {
   // If not perfect (depth-limited flavor) could add heuristics; for now return best
   return bestMove || { index: moves[0].index, score: 0 };
 }
-function drawWinLine(pattern) {
-  const winLine = document.getElementById("winLine");
-  const board = document.getElementById("board");
-
-  const boardRect = board.getBoundingClientRect();
-  const boardSize = boardRect.width;
-
-  const key = pattern.toString();
-
-  // Horizontal wins
-  if (["0,1,2", "3,4,5", "6,7,8"].includes(key)) {
-    const rowIndex = Math.floor(pattern[0] / 3);
-    const cellHeight = boardSize / 3;
-    const topPosition = cellHeight * rowIndex + cellHeight / 2;
-
-    winLine.style.width = boardSize + "px";
-    winLine.style.top = topPosition + "px";
-    winLine.style.left = boardSize / 2 + "px";
-    winLine.style.transform = "translate(-50%, -50%) rotate(0deg)";
-  }
-
-  // Vertical wins
-  else if (["0,3,6", "1,4,7", "2,5,8"].includes(key)) {
-    const colIndex = pattern[0] % 3;
-    const cellWidth = boardSize / 3;
-    const leftPosition = cellWidth * colIndex + cellWidth / 2;
-
-    winLine.style.width = boardSize + "px";
-    winLine.style.top = boardSize / 2 + "px";
-    winLine.style.left = leftPosition + "px";
-    winLine.style.transform = "translate(-50%, -50%) rotate(90deg)";
-  }
-
-  // Diagonal 1 (0,4,8)
-  else if (key === "0,4,8") {
-    const diagonal = Math.sqrt(boardSize * boardSize * 2);
-
-    winLine.style.width = diagonal + "px";
-    winLine.style.top = boardSize / 2 + "px";
-    winLine.style.left = boardSize / 2 + "px";
-    winLine.style.transform = "translate(-50%, -50%) rotate(45deg)";
-  }
-
-  // Diagonal 2 (2,4,6)
-  else if (key === "2,4,6") {
-    const diagonal = Math.sqrt(boardSize * boardSize * 2);
-
-    winLine.style.width = diagonal + "px";
-    winLine.style.top = boardSize / 2 + "px";
-    winLine.style.left = boardSize / 2 + "px";
-    winLine.style.transform = "translate(-50%, -50%) rotate(-45deg)";
-  }
-}
-
 // leaderboard
 function updateLeaderboard() {
   document.getElementById("scoreX").innerText = scores.X || 0;
@@ -398,13 +319,6 @@ resetBtn.addEventListener("click", resetGame);
 
 // allow going back to setup
 changeNamesBtn.addEventListener("click", () => {
-  setupContainer.style.display = "block";
-  gameContainer.style.display = "none";
-  gameActive = false;
-});
-updateLeaderboard();
-// Change Players Button Fix
-changeNamesBtn.addEventListener("click", () => {
   gameContainer.style.display = "none";
   setupContainer.style.display = "block";
 
@@ -414,39 +328,27 @@ changeNamesBtn.addEventListener("click", () => {
 
   // Reset board state
   resetGame();
+  gameActive = false;
 });
+updateLeaderboard();
+
 // GAME HISTORY FUNCTION
-
 function saveGameHistory(result) {
-
   gameHistory.push(result);
-
   localStorage.setItem("tttHistory", JSON.stringify(gameHistory));
-
   displayGameHistory();
-
 }
 
 function displayGameHistory() {
-
   const historyList = document.getElementById("historyList");
-
   if (!historyList) return;
-
   historyList.innerHTML = "";
-
   gameHistory.forEach((result, index) => {
-
     const li = document.createElement("li");
-
     li.innerText = `Game ${index + 1}: ${result}`;
-
     historyList.appendChild(li);
-
   });
-
 }
 
 // Load history when page loads
-
 displayGameHistory();
